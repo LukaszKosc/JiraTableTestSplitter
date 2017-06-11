@@ -125,6 +125,17 @@ def clone_issue(issue_key_to_be_cloned, fields_to_use):
     new_issue = jira.create_issue(fields=fields_to_use)
     transitions = jira.transitions(new_issue.key)
     current_status = str(jira.issue(issue_key_to_be_cloned).fields.status.name)
+    # new_issue = 'TEST-1000'
+    # parent_issue = 'TEST-2000'
+    #
+    # jira.create_issue_link(
+    #     type="Duplicate",
+    #     inwardIssue=new_issue,
+    #     outwardIssue=parent_issue,
+    #     comment={
+    #         "body": "Linking '%s' --&gt; '%s'" % (new_issue, parent_issue),
+    #     }
+    # )
     for t in transitions:
         if str(t['name']) == current_status:
             jira.transition_issue(new_issue.key, str(t['id']))
