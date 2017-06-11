@@ -16,10 +16,8 @@ def get_scenarios_with_values(scenario_table_rows, variables_names, scenario_tem
     for scenario_row in range(0, table_values_rows):
         d = {}
         for name, value in zip(variables_names, scenario_table_rows[scenario_row]):
-            if name == '${title}':
-                d[name] = value.replace(' ', '_')
-            else:
-                d[name] = value
+            d[name] = value.replace(' ', '_') if name == '${title}' else value
+
         scenarios_to_save[d['${title}']] = multiwordReplace(scenario_template, d)
     return scenarios_to_save
 
@@ -163,10 +161,7 @@ def create_sub_tickets(source_ticket_id):
 def check_ticket_status(ticket_id):
     try:
         ticket = jira.issue(id=ticket_id)
-        if ticket.key:
-            return True
-        else:
-            return False
+        return True if ticket.key else False
     except JIRAError as err:
         err_lines = [x.strip() for x in str(err).split('response')[0].split('\n') if len(x) > 0]
         err_lines = [x for x in err_lines if 'text' in x ]
