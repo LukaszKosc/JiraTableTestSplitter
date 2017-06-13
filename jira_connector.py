@@ -9,6 +9,7 @@ jira_password = "password123"
 jira_server = {'server': jira_server}
 jira = JIRA(options=jira_server, basic_auth=(jira_user, jira_password))
 
+VARIABLES_REGEX = '^(\$\{[a-zA-Z0-9\-]+\}(\|)?)+'
 
 def get_scenarios_with_values(scenario_table_rows, variables_names, scenario_template):
     scenarios_to_save = {}
@@ -58,13 +59,12 @@ def get_issue_fields(issue_id):
     return str(issue.fields.description).split('\r\n'), fields_to_return
 
 
-def get_table_index(description):
+def get_variables_table_index(description):
     table_index = -1
     description_length = len(description)
     for index in range(0,description_length):
-        p = re.compile('^(\$\{[a-zA-Z0-9\-]+\}(\|)?)+')
-        m = p.match(description[index])
-        if m:
+        # p = re.compile('^(\$\{[a-zA-Z0-9\-]+\}(\|)?)+')
+        if re.compile(VARIABLES_REGEX).match(description[index]):
             table_index = index
             break
     return table_index
@@ -72,11 +72,9 @@ def get_table_index(description):
 
 def get_variable_names(description, variables_index):
     variables_line = description[variables_index:variables_index + 1][0]
-    p = re.compile('^(\$\{[a-zA-Z0-9\-]+\}(\|)?)+')
-    m = p.match(variables_line)
-    if m:
-        variables = ''.join(str(x).replace(' ', '') for x in variables_line).split('|')
-        return variables
+    # p = re.compile('^(\$\{[a-zA-Z0-9\-]+\}(\|)?)+')
+    if re.compile(VARIABLES_REGEX).match(variables_line):
+        return ''.join(str(x).replace(' ', '') for x in variables_line).split('|')
     else:
         sys.exit(-1)
 
@@ -99,9 +97,35 @@ def get_scenario_template(description, variables_index):
     return '\r\n'.join(description[0:variables_index])
 
 
-def check_variable_lines(description_lines, variables_line_index):
-    variable_values_count = get_variable_values_count_per_line(get_variable_values(description_lines,
-                                                                                   variables_line_index))
+def check_if_unique_values(description_lines, first_line_of_variables_list, variables_names):
+    unique = True
+    retrieved_variables_values = get_variable_values(description_lines,
+                                                     first_line_of_variables_list)
+    variables_values_to_check = [line for line in retrieved_variables_values[1:]]
+    variables_names_to_check = {}
+    no_of_lines = len(variables_values_to_check)
+    for var_name in variables_names:
+        variables_names_to_check[var_name] = {'index':  retrieved_variables_values[0].index(var_name),
+                                              'unique': True}
+        for z in range(0,no_of_lines-1):
+            for index in range(z+1,no_of_lines):
+                if variables_values_to_check[z][variables_names_to_check[var_name]['index']] == \
+                        variables_values_to_check[index][variables_names_to_check[var_name]['index']]:
+                    unique = False
+                    variables_names_to_check[var_name]['unique'] = False
+                    break
+    print variables_names_to_check
+    if not unique:
+        print 'Values for field(s) {} are not unique.'.format(
+            ','.join([field for field in variables_names if not variables_names_to_check[field]['unique']]))
+        sys.exit(-1)
+    return unique
+
+
+def check_variable_lines(description_lines, variables_line_index, fields_to_check_for_uniqueness):
+    variable_values_count = get_variable_values_count_per_line(
+                                                        get_variable_values(description_lines,
+                                                                            variables_line_index))
     variable_names_count = len(get_variable_names(description_lines, variables_line_index))
     missing_lines = {}
     for key, val in variable_values_count.iteritems():
@@ -119,6 +143,8 @@ def check_variable_lines(description_lines, variables_line_index):
         for key, val in missing_lines.iteritems():
             print val
         sys.exit(-1)
+    else:
+        return check_if_unique_values(description_lines, variables_line_index-1, fields_to_check_for_uniqueness)
 
 
 def clone_issue(issue_key_to_be_cloned, fields_to_use):
@@ -144,12 +170,13 @@ def clone_issue(issue_key_to_be_cloned, fields_to_use):
 
 def create_sub_tickets(source_ticket_id):
     description_lines, my_fields = get_issue_fields(issue_id=source_ticket_id)
-    variables_line_index = get_table_index(description_lines)
+    variables_line_index = get_variables_table_index(description_lines)
     if variables_line_index > 0:
-        check_variable_lines(description_lines, variables_line_index)
-        scenarios_valid = get_scenarios_with_values(get_variable_values(description_lines, variables_line_index),
-                                                    get_variable_names(description_lines, variables_line_index),
-                                                    get_scenario_template(description_lines, variables_line_index))
+        unique_fields = ['${title}', '${op}']
+        if check_variable_lines(description_lines, variables_line_index, unique_fields):
+            scenarios_valid = get_scenarios_with_values(get_variable_values(description_lines, variables_line_index),
+                                                        get_variable_names(description_lines, variables_line_index),
+                                                        get_scenario_template(description_lines, variables_line_index))
         clones = []
         for scenario_summary, scenario in scenarios_valid.iteritems():
             with open('D:\\testy\\'+scenario_summary+'.robot', 'w') as out:
@@ -160,8 +187,8 @@ def create_sub_tickets(source_ticket_id):
 
             my_fields['summary'] = scenario_summary
             my_fields['description'] = scenario
-            issue_id = clone_issue(source_ticket_id, my_fields)
-            clones.append(issue_id)
+            # issue_id = clone_issue(source_ticket_id, my_fields)
+            # clones.append(issue_id)
         print 'clones:', clones
 
     else:
